@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Local Diff Checker</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    textarea { width: 100%; height: 35vh; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .controls { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; align-items: center; }
+    .out { border: 1px solid #ccc; padding: 12px; border-radius: 8px; overflow: auto; max-height: 45vh; }
+    ins { background: #c8facc; text-decoration: none; }
+    del { background: #ffd0d0; text-decoration: none; }
+    code { white-space: pre-wrap; word-break: break-word; }
+    button { padding: 8px 10px; }
+    label { font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>Diff Checker</h1>
+
+  <div class="row">
+    <div>
+      <h3>Left</h3>
+      <textarea id="a" placeholder="Paste text A here..."></textarea>
+      <div class="controls">
+        <label>Load file A <input id="fileA" type="file" /></label>
+      </div>
+    </div>
+    <div>
+      <h3>Right</h3>
+      <textarea id="b" placeholder="Paste text B here..."></textarea>
+      <div class="controls">
+        <label>Load file B <input id="fileB" type="file" /></label>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="run">Diff</button>
+    <button id="swap">Swap</button>
+    <button id="clear">Clear</button>
+    <label><input id="ignoreWS" type="checkbox" /> Ignore whitespace (basic)</label>
+    <label>
+      Mode:
+      <select id="mode">
+        <option value="words">Words</option>
+        <option value="lines">Lines</option>
+        <option value="chars">Chars</option>
+      </select>
+    </label>
+  </div>
+
+  <h3>Result</h3>
+  <div id="out" class="out"><em>No diff yet.</em></div>
+
+  <!-- diff library -->
+  <script src="https://cdn.jsdelivr.net/npm/diff@5/dist/diff.min.js"></script>
+  <script>
+    const elA = document.getElementById('a');
+    const elB = document.getElementById('b');
+    const out = document.getElementById('out');
+
+    function normalize(text) {
+      if (!document.getElementById('ignoreWS').checked) return text;
+      // basic: collapse whitespace runs and trim line ends
+      return text
+        .split('\n')
+        .map(line => line.replace(/\s+/g, ' ').trimEnd())
+        .join('\n')
+        .trim();
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[ch]));
+    }
+
+function renderDiff() {
+  const a = normalize(elA.value);
+  const b = normalize(elB.value);
+  const mode = document.getElementById('mode').value;
+
+  let parts;
+  if (mode === 'lines') parts = Diff.diffLines(a, b);
+  else if (mode === 'chars') parts = Diff.diffChars(a, b);
+  else parts = Diff.diffWordsWithSpace(a, b);
+
+  const hasChanges = parts.some(p => p.added || p.removed);
+
+  let html = '';
+  if (!hasChanges) {
+    html += `<div style="
+      margin-bottom: 10px;
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-weight: 600;
+    ">No difference</div>`;
+  }
+
+  html += '<code>';
+  for (const p of parts) {
+    const txt = escapeHtml(p.value);
+    if (p.added) html += `<ins>${txt}</ins>`;
+    else if (p.removed) html += `<del>${txt}</del>`;
+    else html += txt;
+  }
+  html += '</code>';
+
+  out.innerHTML = html;
+}
+
+
+    document.getElementById('run').addEventListener('click', renderDiff);
+
+    document.getElementById('swap').addEventListener('click', () => {
+      const tmp = elA.value; elA.value = elB.value; elB.value = tmp;
+      renderDiff();
+    });
+
+    document.getElementById('clear').addEventListener('click', () => {
+      elA.value = ''; elB.value = ''; out.innerHTML = '<em>No diff yet.</em>';
+    });
+
+    async function loadFile(inputEl, targetTextarea) {
+      const file = inputEl.files && inputEl.files[0];
+      if (!file) return;
+      targetTextarea.value = await file.text();
+      renderDiff();
+      inputEl.value = '';
+    }
+
+    document.getElementById('fileA').addEventListener('change', (e) => loadFile(e.target, elA));
+    document.getElementById('fileB').addEventListener('change', (e) => loadFile(e.target, elB));
+  </script>
+</body>
+</html>
